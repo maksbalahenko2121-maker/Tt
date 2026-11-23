@@ -1,14 +1,12 @@
 import os
 
+import wave
+
+import array
+
 import random
 
 import subprocess
-
-import numpy as np
-
-from scipy.io import wavfile
-
-from scipy.signal import find_peaks, butter, lfilter
 
 import telebot
 
@@ -46,25 +44,9 @@ def prepare_slowed_audio(input_audio, output_audio):
 
  
 
-def bandpass_bass(data, rate):
-
-    """Выделяет только низкие частоты (басы и бочку 40-150 Гц), чтобы точно ловить бит."""
-
-    nyq = 0.5 * rate
-
-    low = 40.0 / nyq
-
-    high = 150.0 / nyq
-
-    b, a = butter(2, [low, high], btype='band')
-
-    return lfilter(b, a, data)
-
- 
-
 def analyze_music_beats(audio_path, num_images):
 
-    """Находит дроп в треке, удары баса и силу каждого бита."""
+    """Анализирует басы и находит дроп на чистом Python."""
 
     wav_path = audio_path + ".wav"
 
@@ -72,75 +54,103 @@ def analyze_music_beats(audio_path, num_images):
 
         FFMPEG_PATH, "-y", "-i", audio_path,
 
-        "-ac", "1", "-ar", "22050", wav_path
+        "-af", "lowpass=f=150",
+
+        "-ac", "1", "-ar", "1000", wav_path
 
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
    
 
-    rate, data = wavfile.read(wav_path)
+    with wave.open(wav_path, 'rb') as wf:
+
+        rate = wf.getframerate()
+
+        n_frames = wf.getnframes()
+
+        raw_bytes = wf.readframes(n_frames)
 
     os.remove(wav_path)
 
    
 
-    data = data.astype(np.float32)
+    samples = array.array('h', raw_bytes)
 
-    bass_data = np.abs(bandpass_bass(data, rate))
+    step = int(rate * 0.05)
 
-   
+    energies = []
 
-    window = int(rate * 0.04)
+    for i in range(0, len(samples) - step, step):
 
-    envelope = np.convolve(bass_data, np.ones(window)/window, mode='same')
+        chunk = samples[i:i+step]
 
-   
+        energy = sum(abs(x) for x in chunk) / step
 
-    min_dist = int(rate * 0.42)
+        energies.append(energy)
 
-    peaks, _ = find_peaks(envelope, distance=min_dist, prominence=np.max(envelope)*0.18)
+       
 
-   
-
-    if len(peaks) < num_images + 1:
+    if not energies:
 
         return 0.0, [0.75] * num_images, [0.5] * num_images
 
  
 
-    peak_times = peaks / rate
+    max_e = max(energies) or 1.0
 
-    peak_strengths = envelope[peaks]
+    threshold = max_e * 0.45
 
    
 
+    peaks = []
+
+    last_peak = -10
+
+    for i in range(1, len(energies) - 1):
+
+        if energies[i] > threshold and energies[i] >= energies[i-1] and energies[i] >= energies[i+1]:
+
+            if i - last_peak >= 9:
+
+                peaks.append((i * 0.05, energies[i]))
+
+                last_peak = i
+
+               
+
+    if len(peaks) < num_images + 1:
+
+        return 0.0, [0.75] * num_images, [0.6] * num_images
+
+ 
+
     best_idx = 0
 
-    max_energy = -1
+    max_sum = -1
 
     for i in range(len(peaks) - num_images):
 
-        energy = np.sum(peak_strengths[i : i + num_images])
+        s = sum(p[1] for p in peaks[i : i + num_images])
 
-        if energy > max_energy:
+        if s > max_sum:
 
-            max_energy = energy
+            max_sum = s
 
             best_idx = i
 
            
 
-    selected_times = peak_times[best_idx : best_idx + num_images + 1]
+    selected = peaks[best_idx : best_idx + num_images + 1]
 
-    selected_strengths = peak_strengths[best_idx : best_idx + num_images]
+    strengths = [p[1] for p in selected[:-1]]
+
+    min_s, max_s = min(strengths), max(strengths)
 
    
 
-    min_s, max_s = np.min(selected_strengths), np.max(selected_strengths)
-
     if max_s > min_s:
 
-        intensities = (selected_strengths - min_s) / (max_s - min_s)
+        intensities = [(s - min_s) / (max_s - min_s) for s in strengths]
 
     else:
 
@@ -148,17 +158,17 @@ def analyze_music_beats(audio_path, num_images):
 
        
 
-    start_time = round(float(selected_times[0]), 3)
+    start_time = round(selected[0], 3)
 
     durations = []
 
     for i in range(num_images):
 
-        dur = selected_times[i+1] - selected_times[i]
+        dur = selected[i+1][0] - selected[i][0]
 
         dur = max(0.35, min(1.5, dur))
 
-        durations.append(round(float(dur), 3))
+        durations.append(round(dur, 3))
 
        
 
@@ -254,9 +264,11 @@ def build_music_synced_fx(frames, intensity):
 
    
 
+    # Исправлено: переменная n вместо on для фильтра rotate
+
     if intensity >= 0.4 and random.random() > 0.5:
 
-        filters.append(random.choice(["hflip", "rotate=0.05*PI/180*on:fillcolor=black", "rotate=-0.05*PI/180*on:fillcolor=black"]))
+        filters.append(random.choice(["hflip", "rotate=0.05*PI/180*n:fillcolor=black", "rotate=-0.05*PI/180*n:fillcolor=black"]))
 
  
 
