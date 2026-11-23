@@ -1,2 +1,4 @@
 pyTelegramBotApi
 imageio-ffmpeg
+numpy
+scipy
