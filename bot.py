@@ -158,7 +158,7 @@ def analyze_music_beats(audio_path, num_images):
 
        
 
-    start_time = round(selected[0], 3)
+    start_time = round(selected[0][0], 3)
 
     durations = []
 
@@ -212,7 +212,7 @@ def build_music_synced_fx(frames, intensity):
 
             ("1.0 + 0.22*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
 
-            ("1.22", "iw/2-(iw/zoom/2) + 75*(1 - on/duration)", "ih/2-(ih/zoom/2)"),
+            ("1.22", "iw/2-(iw/zoom/2) + 75*(1 - on/duration)", "ih/2-(iw/zoom/2)"),
 
             ("1.22", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2) - 75*(1 - on/duration)")
 
@@ -264,11 +264,11 @@ def build_music_synced_fx(frames, intensity):
 
    
 
-    # Исправлено: переменная n вместо on для фильтра rotate
+    # Безопасный поворот через время t и зеркальное отражение
 
     if intensity >= 0.4 and random.random() > 0.5:
 
-        filters.append(random.choice(["hflip", "rotate=0.05*PI/180*n:fillcolor=black", "rotate=-0.05*PI/180*n:fillcolor=black"]))
+        filters.append(random.choice(["hflip", "rotate=0.04*sin(t*3):fillcolor=black", "rotate=-0.04*sin(t*3):fillcolor=black"]))
 
  
 
