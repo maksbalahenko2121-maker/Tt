@@ -4,6 +4,8 @@ import subprocess
 
 import telebot
 
+import imageio_ffmpeg
+
  
 
 # Вставьте сюда токен вашего бота от @BotFather
@@ -12,11 +14,15 @@ BOT_TOKEN = "9174803226:AAH4d-aHWVTFZdcGoXIUD0GfxCLmUvXW4hk"
 
  
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# Получаем путь к встроенному FFmpeg
+
+FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 
  
 
-# Временное хранилище файлов пользователей
+bot = telebot.TeleBot(BOT_TOKEN)
+
+ 
 
 user_data = {}
 
@@ -51,8 +57,6 @@ def handle_photo(message):
         user_data[chat_id] = {'photos': [], 'audio': None}
 
    
-
-    # Берем фото в самом лучшем качестве
 
     file_info = bot.get_file(message.photo[-1].file_id)
 
@@ -144,19 +148,17 @@ def make_edit(message):
 
    
 
-    # Настройка длительности каждого кадра (например, 0.8 секунды на картинку для динамики)
-
     duration_per_img = 0.8
 
     total_duration = len(data['photos']) * duration_per_img
 
    
 
-    # Формируем команду для FFmpeg: делаем размер 1080x1920, добавляем зум и накладываем музыку
+    # Используем FFMPEG_PATH вместо слова "ffmpeg"
 
     cmd = [
 
-        "ffmpeg", "-y",
+        FFMPEG_PATH, "-y",
 
         "-framerate", str(1 / duration_per_img),
 
@@ -197,8 +199,6 @@ def make_edit(message):
         bot.reply_to(message, f"Ошибка при монтаже: {e}")
 
     finally:
-
-        # Очищаем временные файлы, чтобы не забивать память хостинга
 
         for f in os.listdir(folder):
 
