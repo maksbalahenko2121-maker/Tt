@@ -54,15 +54,7 @@ def get_media_duration(file_path):
 
  
 
-def analyze_music_beats(audio_path, target_duration=15.0):
-
-    """
-
-    Высокоточное распознавание ударов бочки (Beat Attack / Onset Detection):
-
-    Выделяет только саб-бас (35-130 Гц) с шагом 0.025 сек и ищет резкие скачки энергии.
-
-    """
+def analyze_music_beats(audio_path, target_duration=25.0):
 
     wav_path = audio_path + ".wav"
 
@@ -90,8 +82,6 @@ def analyze_music_beats(audio_path, target_duration=15.0):
 
     samples = array.array('h', raw_bytes)
 
-    # Шаг 0.025 сек (40 замеров в секунду для высокой точности)
-
     step = int(rate * 0.025)
 
     energies = [sum(abs(x) for x in samples[i:i+step]) / step for i in range(0, len(samples) - step, step)]
@@ -100,31 +90,19 @@ def analyze_music_beats(audio_path, target_duration=15.0):
 
     if len(energies) < 20:
 
-        return 0.0, [0.75] * 20, [0.6] * 20
+        return 0.0, [0.75] * 32, [0.6] * 32
 
  
 
-    # Считаем Onset (резкий прирост громкости баса по сравнению с предыдущим окном)
+    onsets = [0.0] + [max(0.0, energies[i] - energies[i - 1]) for i in range(1, len(energies))]
 
-    onsets = [0.0]
-
-    for i in range(1, len(energies)):
-
-        diff = energies[i] - energies[i - 1]
-
-        onsets.append(max(0.0, diff))
-
- 
-
-    max_onset = max(onsets) or 1.0
-
-    threshold = max_onset * 0.28
+    threshold = (max(onsets) or 1.0) * 0.26
 
    
 
     peak_times, peak_strengths = [], []
 
-    last_peak = -14 # Минимум 0.35 сек (14 * 0.025) между сменами кадров
+    last_peak = -14
 
    
 
@@ -138,8 +116,6 @@ def analyze_music_beats(audio_path, target_duration=15.0):
 
                 peak_times.append(round(i * 0.025, 3))
 
-                # Учитываем и резкость удара, и общую мощь баса в этот момент
-
                 peak_strengths.append(curr_o * 0.6 + energies[i] * 0.4)
 
                 last_peak = i
@@ -148,11 +124,9 @@ def analyze_music_beats(audio_path, target_duration=15.0):
 
     if len(peak_times) < 6:
 
-        return 0.0, [0.75] * 20, [0.6] * 20
+        return 0.0, [0.75] * 32, [0.6] * 32
 
  
-
-    # Находим 15-секундный отрезок (ДРОП) с максимальной плотностью и силой битов
 
     best_start, best_end, max_score = 0, len(peak_times) - 1, -1.0
 
@@ -196,55 +170,57 @@ def analyze_music_beats(audio_path, target_duration=15.0):
 
 def generate_150_fx(frames, intensity, is_video=False):
 
-    """
-
-    Аккуратная камера без сильного кропа лиц (зум 1.0 - 1.16) + 150+ эффектов под бит.
-
-    """
-
     filters = []
 
     if is_video:
 
-        # Для видео: плавное замедление + легкий безопасный импульс без обрезки краев
-
         filters.extend(["setpts=1.3*PTS", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"])
 
-        if intensity >= 0.75:
+        if intensity >= 0.72:
 
-            filters.append("scale=1150:2044,crop=1080:1920:x='35+sin(n*3.5)*18':y='62+cos(n*3.5)*18'")
+            filters.append(random.choice([
 
-        elif intensity >= 0.45:
+                "scale=1150:2044,crop=1080:1920:x='35+sin(n*3.5)*18':y='62+cos(n*3.5)*18'",
+
+                "scale=1160:2062,crop=1080:1920:x='40*(1-t)':y='70*t'",
+
+                "scale=1140:2026,crop=1080:1920:x='30+cos(n*5)*14':y='50'"
+
+            ]))
+
+        elif intensity >= 0.42:
 
             filters.append("scale=1130:2008,crop=1080:1920:x='25*(1-t)':y='44'")
 
     else:
 
-        # Для фото: мягкий зум (не больше 1.16x), чтобы персонажи и лица оставались в кадре
-
-        if intensity >= 0.75:
+        if intensity >= 0.72:
 
             motions = [
 
-                ("1.16 - 0.16*(on/duration)", "iw/2-(iw/zoom/2)+if(lt(on,8),sin(on*3.5)*22,0)", "ih/2.2-(ih/zoom/2)+if(lt(on,8),cos(on*3.5)*22,0)"),
+                ("1.17 - 0.17*(on/duration)", "iw/2-(iw/zoom/2)+if(lt(on,8),sin(on*3.5)*22,0)", "ih/2.2-(ih/zoom/2)+if(lt(on,8),cos(on*3.5)*22,0)"),
 
-                ("1.0 + 0.15*(on/duration)", "iw/2-(iw/zoom/2)+sin(on*10)*10", "ih/2.2-(ih/zoom/2)+cos(on*10)*10"),
+                ("1.0 + 0.16*(on/duration)", "iw/2-(iw/zoom/2)+sin(on*10)*10", "ih/2.2-(ih/zoom/2)+cos(on*10)*10"),
 
-                ("1.14 - 0.14*(on/duration)", "iw/2-(iw/zoom/2)-35*(1-on/duration)", "ih/2.2-(ih/zoom/2)"),
+                ("1.15 - 0.15*(on/duration)", "iw/2-(iw/zoom/2)-38*(1-on/duration)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.14 - 0.14*(on/duration)", "iw/2-(iw/zoom/2)+35*(1-on/duration)", "ih/2.2-(ih/zoom/2)")
+                ("1.15 - 0.15*(on/duration)", "iw/2-(iw/zoom/2)+38*(1-on/duration)", "ih/2.2-(ih/zoom/2)"),
+
+                ("1.16 - 0.16*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)-35*(1-on/duration)")
 
             ]
 
-        elif intensity >= 0.45:
+        elif intensity >= 0.42:
 
             motions = [
 
-                ("1.12 - 0.12*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
+                ("1.13 - 0.13*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.0 + 0.11*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
+                ("1.0 + 0.12*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.10", "iw/2-(iw/zoom/2)+25*(1-on/duration)", "ih/2.2-(ih/zoom/2)")
+                ("1.11", "iw/2-(iw/zoom/2)+28*(1-on/duration)", "ih/2.2-(ih/zoom/2)"),
+
+                ("1.11", "iw/2-(iw/zoom/2)-28*(1-on/duration)", "ih/2.2-(ih/zoom/2)")
 
             ]
 
@@ -254,7 +230,9 @@ def generate_150_fx(frames, intensity, is_video=False):
 
                 ("1.0 + 0.08*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.09 - 0.09*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)")
+                ("1.09 - 0.09*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
+
+                ("1.08", "iw/2-(iw/zoom/2)+18*(on/duration)", "ih/2.2-(ih/zoom/2)")
 
             ]
 
@@ -270,11 +248,9 @@ def generate_150_fx(frames, intensity, is_video=False):
 
  
 
-    # Геометрия: убрали переворот вверх ногами (vflip), оставили только зеркало и легкий наклон
+    geo = random.choice([None, None, "hflip", "rotate=0.028*sin(t*4):fillcolor=black", "rotate=-0.028*sin(t*4):fillcolor=black"])
 
-    geo = random.choice([None, None, "hflip", "rotate=0.025*sin(t*4):fillcolor=black", "rotate=-0.025*sin(t*4):fillcolor=black"])
-
-    if geo and intensity >= 0.45:
+    if geo and intensity >= 0.42:
 
         filters.append(geo)
 
@@ -286,15 +262,21 @@ def generate_150_fx(frames, intensity, is_video=False):
 
         "fade=t=in:st=0:d=0.12:color=red",
 
+        "fade=t=in:st=0:d=0.12:color=cyan",
+
         "negate=enable='lt(n,2)'",
 
-        "eq=brightness='if(lt(mod(n,3),1),0.2,-0.04)'"
+        "eq=brightness='if(lt(mod(n,3),1),0.22,-0.04)'",
 
-    ] if intensity >= 0.75 else [
+        "eq=contrast='if(lt(n,3),1.75,1.25)'"
+
+    ] if intensity >= 0.72 else [
 
         "fade=t=in:st=0:d=0.10:color=white",
 
         "fade=t=in:st=0:d=0.12:color=black",
+
+        "fade=t=in:st=0:d=0.10:color=yellow",
 
         None
 
@@ -310,29 +292,41 @@ def generate_150_fx(frames, intensity, is_video=False):
 
     styles = [
 
-        "rgbashift=rh=-14:bh=14:rv=6:bv=-6",
+        "rgbashift=rh=-15:bh=15:rv=6:bv=-6",
 
-        "rgbashift=rh=11:bh=-11:gh=-4:gv=4",
+        "rgbashift=rh=12:bh=-12:gh=-5:gv=5",
 
-        "rgbashift=rh=-7:bh=7,eq=contrast=1.3:saturation=1.4",
+        "rgbashift=rh=-8:bh=8,eq=contrast=1.35:saturation=1.45",
 
-        "hue=h=sin(2*PI*t)*40:s=1.35",
+        "rgbashift=rv=-12:bv=12,eq=contrast=1.3",
 
-        "hue=h=180:s=1.25,eq=contrast=1.25",
+        "hue=h=sin(2*PI*t)*45:s=1.4",
 
-        "eq=contrast=1.4:brightness=-0.06:saturation=0.8",
+        "hue=h=180:s=1.3,eq=contrast=1.28",
 
-        "eq=contrast=1.3:brightness=0.05:saturation=1.45",
+        "hue=h=-45:s=1.35,eq=contrast=1.3",
 
-        "eq=saturation=0.0:contrast=1.5",
+        "eq=contrast=1.45:brightness=-0.06:saturation=0.75",
 
-        "colorbalance=rs=0.22:bs=-0.18:rm=0.12",
+        "eq=contrast=1.32:brightness=0.05:saturation=1.5",
 
-        "colorbalance=bs=0.25:gs=0.08:rs=-0.12",
+        "eq=saturation=0.0:contrast=1.55",
 
-        "gblur=sigma=1.1,eq=contrast=1.22:brightness=0.05:saturation=1.3",
+        "colorbalance=rs=0.25:bs=-0.2:rm=0.15",
 
-        "noise=alls=18:allf=t+u,rgbashift=rh=-5:bh=5,eq=contrast=1.18"
+        "colorbalance=bs=0.28:gs=0.1:rs=-0.15",
+
+        "colorbalance=gs=0.22:bs=0.15:rs=-0.2",
+
+        "colorbalance=rs=0.2:gs=0.12:bs=-0.25",
+
+        "gblur=sigma=1.1,eq=contrast=1.25:brightness=0.06:saturation=1.35",
+
+        "unsharp=5:5:1.5:5:5:0.0,eq=contrast=1.3:saturation=1.35",
+
+        "noise=alls=20:allf=t+u,rgbashift=rh=-6:bh=6,eq=contrast=1.2",
+
+        "tmix=frames=2:weights='1 2',eq=contrast=1.35:saturation=1.4"
 
     ]
 
