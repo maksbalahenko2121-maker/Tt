@@ -96,7 +96,7 @@ def analyze_music_beats(audio_path, target_duration=25.0):
 
     onsets = [0.0] + [max(0.0, energies[i] - energies[i - 1]) for i in range(1, len(energies))]
 
-    threshold = (max(onsets) or 1.0) * 0.26
+    threshold = (max(onsets) or 1.0) * 0.25
 
    
 
@@ -116,7 +116,7 @@ def analyze_music_beats(audio_path, target_duration=25.0):
 
                 peak_times.append(round(i * 0.025, 3))
 
-                peak_strengths.append(curr_o * 0.6 + energies[i] * 0.4)
+                peak_strengths.append(curr_o * 0.65 + energies[i] * 0.35)
 
                 last_peak = i
 
@@ -160,7 +160,7 @@ def analyze_music_beats(audio_path, target_duration=25.0):
 
     start_time = next(iter(sel_times))
 
-    durations = [round(max(0.35, min(1.5, b - a)), 3) for a, b in zip(sel_times[:-1], sel_times[1:])]
+    durations = [round(max(0.35, min(1.4, b - a)), 3) for a, b in zip(sel_times[:-1], sel_times[1:])]
 
        
 
@@ -170,57 +170,71 @@ def analyze_music_beats(audio_path, target_duration=25.0):
 
 def generate_150_fx(frames, intensity, is_video=False):
 
+    """
+
+    Современный стиль Alight Motion / After Effects:
+
+    Экспоненциальное затухание скорости (Velocity Graphs), затухающий шейк,
+
+    мягкий Motion Blur и современная цветокоррекция (CC).
+
+    """
+
     filters = []
 
     if is_video:
 
-        filters.extend(["setpts=1.3*PTS", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"])
+        # Velocity Slow-Mo + плавный импульс на старте удара
 
-        if intensity >= 0.72:
+        filters.extend(["setpts=1.35*PTS", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"])
 
-            filters.append(random.choice([
+        if intensity >= 0.7:
 
-                "scale=1150:2044,crop=1080:1920:x='35+sin(n*3.5)*18':y='62+cos(n*3.5)*18'",
+            filters.append("scale=1160:2062,crop=1080:1920:x='40+sin(n*3.2)*24*exp(-0.22*n)':y='71+cos(n*3.2)*24*exp(-0.22*n)'")
 
-                "scale=1160:2062,crop=1080:1920:x='40*(1-t)':y='70*t'",
+        elif intensity >= 0.4:
 
-                "scale=1140:2026,crop=1080:1920:x='30+cos(n*5)*14':y='50'"
-
-            ]))
-
-        elif intensity >= 0.42:
-
-            filters.append("scale=1130:2008,crop=1080:1920:x='25*(1-t)':y='44'")
+            filters.append("scale=1130:2008,crop=1080:1920:x='25*exp(-4*t)':y='44*exp(-4*t)'")
 
     else:
 
-        if intensity >= 0.72:
+        # Графики скорости (Ease-Out Graphs): быстрый рывок в первые кадры и зависание
+
+        if intensity >= 0.7:
 
             motions = [
 
-                ("1.17 - 0.17*(on/duration)", "iw/2-(iw/zoom/2)+if(lt(on,8),sin(on*3.5)*22,0)", "ih/2.2-(ih/zoom/2)+if(lt(on,8),cos(on*3.5)*22,0)"),
+                # 1. Alight Motion Elastic Punch + затухающая тряска
 
-                ("1.0 + 0.16*(on/duration)", "iw/2-(iw/zoom/2)+sin(on*10)*10", "ih/2.2-(ih/zoom/2)+cos(on*10)*10"),
+                ("1.0 + 0.18*exp(-0.18*on)", "iw/2-(iw/zoom/2)+sin(on*3.5)*28*exp(-0.25*on)", "ih/2.2-(ih/zoom/2)+cos(on*3.5)*28*exp(-0.25*on)"),
 
-                ("1.15 - 0.15*(on/duration)", "iw/2-(iw/zoom/2)-38*(1-on/duration)", "ih/2.2-(ih/zoom/2)"),
+                # 2. Быстрый влет (Smooth Zoom In Ease-Out)
 
-                ("1.15 - 0.15*(on/duration)", "iw/2-(iw/zoom/2)+38*(1-on/duration)", "ih/2.2-(ih/zoom/2)"),
+                ("1.16 - 0.14*exp(-0.15*on)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.16 - 0.16*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)-35*(1-on/duration)")
+                # 3. Плавный слайд слева с торможением (Whip Slide Left)
+
+                ("1.14", "iw/2-(iw/zoom/2) - 55*exp(-0.18*on)", "ih/2.2-(ih/zoom/2)"),
+
+                # 4. Плавный слайд справа с торможением (Whip Slide Right)
+
+                ("1.14", "iw/2-(iw/zoom/2) + 55*exp(-0.18*on)", "ih/2.2-(ih/zoom/2)"),
+
+                # 5. Удар сверху вниз с пружиной (Drop Bounce)
+
+                ("1.15", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2) - 50*exp(-0.18*on)")
 
             ]
 
-        elif intensity >= 0.42:
+        elif intensity >= 0.4:
 
             motions = [
 
-                ("1.13 - 0.13*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
+                ("1.0 + 0.12*exp(-0.14*on)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.0 + 0.12*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
+                ("1.13 - 0.11*exp(-0.14*on)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.11", "iw/2-(iw/zoom/2)+28*(1-on/duration)", "ih/2.2-(ih/zoom/2)"),
-
-                ("1.11", "iw/2-(iw/zoom/2)-28*(1-on/duration)", "ih/2.2-(ih/zoom/2)")
+                ("1.11", "iw/2-(iw/zoom/2) + 35*exp(-0.15*on)", "ih/2.2-(ih/zoom/2)")
 
             ]
 
@@ -230,9 +244,7 @@ def generate_150_fx(frames, intensity, is_video=False):
 
                 ("1.0 + 0.08*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
 
-                ("1.09 - 0.09*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)"),
-
-                ("1.08", "iw/2-(iw/zoom/2)+18*(on/duration)", "ih/2.2-(ih/zoom/2)")
+                ("1.09 - 0.09*(on/duration)", "iw/2-(iw/zoom/2)", "ih/2.2-(ih/zoom/2)")
 
             ]
 
@@ -248,39 +260,49 @@ def generate_150_fx(frames, intensity, is_video=False):
 
  
 
-    geo = random.choice([None, None, "hflip", "rotate=0.028*sin(t*4):fillcolor=black", "rotate=-0.028*sin(t*4):fillcolor=black"])
+    # Плавный Motion Blur (шлейф движения) при рывках на сильных битах
 
-    if geo and intensity >= 0.42:
+    if intensity >= 0.65:
+
+        filters.append("tmix=frames=2:weights='1 2'")
+
+ 
+
+    # Легкий киношный наклон с затуханием (Tilt Bounce) или зеркало
+
+    geo = random.choice([None, None, "hflip", "rotate=0.035*exp(-4*t)*sin(t*12):fillcolor=black", "rotate=-0.035*exp(-4*t)*sin(t*12):fillcolor=black"])
+
+    if geo and intensity >= 0.45:
 
         filters.append(geo)
 
  
 
-    flashes = [
+    # Вспышки (Exposure Flash / White Flash) только в момент удара
 
-        "fade=t=in:st=0:d=0.12:color=white",
+    if intensity >= 0.7:
 
-        "fade=t=in:st=0:d=0.12:color=red",
+        flashes = [
 
-        "fade=t=in:st=0:d=0.12:color=cyan",
+            "fade=t=in:st=0:d=0.14:color=white",
 
-        "negate=enable='lt(n,2)'",
+            "eq=brightness='0.32*exp(-14*t)':contrast='1.25+0.4*exp(-12*t)'", # Настоящий Exposure Flash из CapCut
 
-        "eq=brightness='if(lt(mod(n,3),1),0.22,-0.04)'",
+            "fade=t=in:st=0:d=0.12:color=black"
 
-        "eq=contrast='if(lt(n,3),1.75,1.25)'"
+        ]
 
-    ] if intensity >= 0.72 else [
+    else:
 
-        "fade=t=in:st=0:d=0.10:color=white",
+        flashes = [
 
-        "fade=t=in:st=0:d=0.12:color=black",
+            "eq=brightness='0.18*exp(-14*t)'",
 
-        "fade=t=in:st=0:d=0.10:color=yellow",
+            "fade=t=in:st=0:d=0.12:color=black",
 
-        None
+            None
 
-    ]
+        ]
 
     flash = random.choice(flashes)
 
@@ -290,46 +312,40 @@ def generate_150_fx(frames, intensity, is_video=False):
 
  
 
-    styles = [
+    # Современный CC (Color Correction — киношный цветокор + легкий RGB на ударе)
 
-        "rgbashift=rh=-15:bh=15:rv=6:bv=-6",
+    cc_styles = [
 
-        "rgbashift=rh=12:bh=-12:gh=-5:gv=5",
+        # 1. Холодный кибер-CC + легкий RGB-импульс
 
-        "rgbashift=rh=-8:bh=8,eq=contrast=1.35:saturation=1.45",
+        "rgbashift=rh=-9:bh=9,colorbalance=bs=0.22:gs=0.06:rs=-0.12,eq=contrast=1.32:saturation=1.25",
 
-        "rgbashift=rv=-12:bv=12,eq=contrast=1.3",
+        # 2. Теплый закатный аниме-CC (Golden Hour)
 
-        "hue=h=sin(2*PI*t)*45:s=1.4",
+        "colorbalance=rs=0.22:gs=0.08:bs=-0.18:rm=0.1,eq=contrast=1.28:saturation=1.35",
 
-        "hue=h=180:s=1.3,eq=contrast=1.28",
+        # 3. Мрачный Phonk CC (глубокий черный + холодные блики)
 
-        "hue=h=-45:s=1.35,eq=contrast=1.3",
+        "eq=contrast=1.42:brightness=-0.05:saturation=0.82,colorbalance=bs=0.15:rs=-0.08",
 
-        "eq=contrast=1.45:brightness=-0.06:saturation=0.75",
+        # 4. Четкий HD-CC (резкость линий + сочные цвета как в Topaz)
 
-        "eq=contrast=1.32:brightness=0.05:saturation=1.5",
+        "unsharp=5:5:1.4:5:5:0.0,eq=contrast=1.3:brightness=0.03:saturation=1.38",
 
-        "eq=saturation=0.0:contrast=1.55",
+        # 5. Неоновый фиолетово-синий CC (Cyber Neon)
 
-        "colorbalance=rs=0.25:bs=-0.2:rm=0.15",
+        "colorbalance=rs=0.18:bs=0.25:gs=-0.12,rgbashift=rh=7:bh=-7,eq=contrast=1.32",
 
-        "colorbalance=bs=0.28:gs=0.1:rs=-0.15",
+        # 6. Мягкий Glow / Dreamy Anime CC
 
-        "colorbalance=gs=0.22:bs=0.15:rs=-0.2",
+        "gblur=sigma=0.8,eq=contrast=1.24:brightness=0.05:saturation=1.32",
 
-        "colorbalance=rs=0.2:gs=0.12:bs=-0.25",
+        # 7. Стильный Ч/Б с высоким контрастом
 
-        "gblur=sigma=1.1,eq=contrast=1.25:brightness=0.06:saturation=1.35",
-
-        "unsharp=5:5:1.5:5:5:0.0,eq=contrast=1.3:saturation=1.35",
-
-        "noise=alls=20:allf=t+u,rgbashift=rh=-6:bh=6,eq=contrast=1.2",
-
-        "tmix=frames=2:weights='1 2',eq=contrast=1.35:saturation=1.4"
+        "eq=saturation=0.0:contrast=1.48:brightness=-0.02"
 
     ]
 
-    filters.extend([random.choice(styles), "vignette=PI/4"])
+    filters.extend([random.choice(cc_styles), "vignette=PI/4.5"])
 
     return ",".join(filters)
