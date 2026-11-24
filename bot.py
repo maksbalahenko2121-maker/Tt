@@ -130,7 +130,7 @@ def analyze_music_beats(audio_path, num_images):
 
     for i in range(len(peaks) - num_images):
 
-        s = sum(p[1] for p in peaks[i : i + num_images])
+        s = sum(p for p in peaks[i : i + num_images])
 
         if s > max_sum:
 
@@ -142,7 +142,7 @@ def analyze_music_beats(audio_path, num_images):
 
     selected = peaks[best_idx : best_idx + num_images + 1]
 
-    strengths = [p[1] for p in selected[:-1]]
+    strengths = [p for p in selected[:-1]]
 
     min_s, max_s = min(strengths), max(strengths)
 
@@ -158,13 +158,13 @@ def analyze_music_beats(audio_path, num_images):
 
        
 
-    start_time = round(selected[0][0], 3)
+    start_time = round(selected, 3)
 
     durations = []
 
     for i in range(num_images):
 
-        dur = selected[i+1][0] - selected[i][0]
+        dur = selected[i+1] - selected[i]
 
         dur = max(0.35, min(1.5, dur))
 
@@ -263,8 +263,6 @@ def build_music_synced_fx(frames, intensity):
     ]
 
    
-
-    # Безопасный поворот через время t и зеркальное отражение
 
     if intensity >= 0.4 and random.random() > 0.5:
 
