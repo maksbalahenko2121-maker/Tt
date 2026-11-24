@@ -46,7 +46,7 @@ def prepare_slowed_audio(input_audio, output_audio):
 
 def analyze_music_beats(audio_path, num_images):
 
-    """Анализирует басы и находит дроп на чистом Python."""
+    """Анализирует басы и находит дроп на чистом Python без индексов."""
 
     wav_path = audio_path + ".wav"
 
@@ -102,23 +102,33 @@ def analyze_music_beats(audio_path, num_images):
 
    
 
-    peaks = []
+    peak_times = []
+
+    peak_strengths = []
 
     last_peak = -10
 
     for i in range(1, len(energies) - 1):
 
-        if energies[i] > threshold and energies[i] >= energies[i-1] and energies[i] >= energies[i+1]:
+        curr_e = energies[i]
+
+        prev_e = energies[i - 1]
+
+        next_e = energies[i + 1]
+
+        if curr_e > threshold and curr_e >= prev_e and curr_e >= next_e:
 
             if i - last_peak >= 9:
 
-                peaks.append((i * 0.05, energies[i]))
+                peak_times.append(i * 0.05)
+
+                peak_strengths.append(curr_e)
 
                 last_peak = i
 
                
 
-    if len(peaks) < num_images + 1:
+    if len(peak_times) < num_images + 1:
 
         return 0.0, [0.75] * num_images, [0.6] * num_images
 
@@ -126,11 +136,13 @@ def analyze_music_beats(audio_path, num_images):
 
     best_idx = 0
 
-    max_sum = -1
+    max_sum = -1.0
 
-    for i in range(len(peaks) - num_images):
+    for i in range(len(peak_times) - num_images):
 
-        s = sum(p for p in peaks[i : i + num_images])
+        window_strengths = peak_strengths[i : i + num_images]
+
+        s = sum(window_strengths)
 
         if s > max_sum:
 
@@ -140,17 +152,21 @@ def analyze_music_beats(audio_path, num_images):
 
            
 
-    selected = peaks[best_idx : best_idx + num_images + 1]
+    sel_times = peak_times[best_idx : best_idx + num_images + 1]
 
-    strengths = [p for p in selected[:-1]]
+    sel_strengths = peak_strengths[best_idx : best_idx + num_images]
 
-    min_s, max_s = min(strengths), max(strengths)
+   
+
+    min_s = min(sel_strengths)
+
+    max_s = max(sel_strengths)
 
    
 
     if max_s > min_s:
 
-        intensities = [(s - min_s) / (max_s - min_s) for s in strengths]
+        intensities = [(s - min_s) / (max_s - min_s) for s in sel_strengths]
 
     else:
 
@@ -158,13 +174,13 @@ def analyze_music_beats(audio_path, num_images):
 
        
 
-    start_time = round(selected, 3)
+    start_time = round(next(iter(sel_times)), 3)
 
     durations = []
 
-    for i in range(num_images):
+    for t_curr, t_next in zip(sel_times[:-1], sel_times[1:]):
 
-        dur = selected[i+1] - selected[i]
+        dur = t_next - t_curr
 
         dur = max(0.35, min(1.5, dur))
 
@@ -318,7 +334,9 @@ def handle_photo(message):
 
    
 
-    file_info = bot.get_file(message.photo[-1].file_id)
+    photo_obj = message.photo[-1]
+
+    file_info = bot.get_file(photo_obj.file_id)
 
     downloaded_file = bot.download_file(file_info.file_path)
 
@@ -511,9 +529,3 @@ def make_edit(message):
                 os.remove(os.path.join(folder, f))
 
             os.rmdir(folder)
-
-        user_data[chat_id] = {'photos': [], 'audio': None}
-
- 
-
-bot.polling(none_stop=True)
