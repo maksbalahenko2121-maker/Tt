@@ -529,3 +529,11 @@ def make_edit(message):
                 os.remove(os.path.join(folder, f))
 
             os.rmdir(folder)
+
+        user_data[chat_id] = {'photos': [], 'audio': None}
+
+ 
+
+bot.polling(none_stop=True)
+
+
