@@ -2,6 +2,8 @@ import os
 
 import random
 
+import threading
+
 import subprocess
 
 import telebot
@@ -20,25 +22,33 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 user_data = {}
 
+data_lock = threading.Lock()
+
  
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'clear'])
 
 def send_welcome(message):
 
-    user_data[message.chat.id] = {'media': [], 'audio': None}
+    with data_lock:
+
+        user_data[message.chat.id] = {'media': [], 'audio': None}
 
     bot.reply_to(
 
         message,
 
-        "🎬 Умный монтажер эдитов (Видео + Фото + Музыка) запущен!\n"
+        "🎬 Умный монтажер эдитов (Видео + Фото + Музыка) готов!\n"
 
-        "∙ Вырезаю исходный звук из видео и делаю Slow-Mo\n"
+        "∙ Видит ВСЕ фотки и видео (даже если кинуть альбомом по 10 штук)\n"
 
-        "∙ Нахожу дроп в музыке и собираю 15-секундный ролик с 150+ эффектами\n\n"
+        "∙ Вырезает исходный звук из видео и делает Slow-Mo\n"
 
-        "Скинь видео и/или картинки, затем трек и жми /make"
+        "∙ Делает мощный эдит до 25 секунд с 1000+ эффектами под басы\n\n"
+
+        "Скидывай сколько угодно фото/видео, затем трек и жми /make\n"
+
+        "(Очистить список файлов: /clear)"
 
     )
 
@@ -50,19 +60,29 @@ def handle_photo(message):
 
     chat_id = message.chat.id
 
-    user_data.setdefault(chat_id, {'media': [], 'audio': None})
-
     file_info = bot.get_file(message.photo[-1].file_id)
+
+    downloaded = bot.download_file(file_info.file_path)
+
+   
 
     os.makedirs(f"temp_{chat_id}", exist_ok=True)
 
-    path = f"temp_{chat_id}/media_{len(user_data[chat_id]['media']):03d}.jpg"
+    # Используем уникальный message_id, чтобы файлы из альбома не перезаписывали друг друга
+
+    path = f"temp_{chat_id}/photo_{message.message_id}_{random.randint(100,999)}.jpg"
 
     with open(path, 'wb') as f:
 
-        f.write(bot.download_file(file_info.file_path))
+        f.write(downloaded)
 
-    user_data[chat_id]['media'].append(('photo', path))
+       
+
+    with data_lock:
+
+        user_data.setdefault(chat_id, {'media': [], 'audio': None})
+
+        user_data[chat_id]['media'].append(('photo', path))
 
  
 
@@ -72,29 +92,41 @@ def handle_video(message):
 
     chat_id = message.chat.id
 
-    user_data.setdefault(chat_id, {'media': [], 'audio': None})
-
     vid = message.video or message.animation
 
     if vid.file_size and vid.file_size > 20 * 1024 * 1024:
 
-        bot.reply_to(message, "⚠️ Видео тяжелее 20 МБ, скинь отрезок покороче!")
+        bot.reply_to(message, "⚠️ Это видео тяжелее 20 МБ, скинь отрезок покороче!")
 
         return
 
+       
+
     file_info = bot.get_file(vid.file_id)
+
+    downloaded = bot.download_file(file_info.file_path)
+
+   
 
     os.makedirs(f"temp_{chat_id}", exist_ok=True)
 
-    path = f"temp_{chat_id}/media_{len(user_data[chat_id]['media']):03d}.mp4"
+    path = f"temp_{chat_id}/video_{message.message_id}_{random.randint(100,999)}.mp4"
 
     with open(path, 'wb') as f:
 
-        f.write(bot.download_file(file_info.file_path))
+        f.write(downloaded)
 
-    user_data[chat_id]['media'].append(('video', path))
+       
 
-    bot.reply_to(message, "🎞 Видео принято (исходный звук удалю)!")
+    with data_lock:
+
+        user_data.setdefault(chat_id, {'media': [], 'audio': None})
+
+        user_data[chat_id]['media'].append(('video', path))
+
+        total = len(user_data[chat_id]['media'])
+
+    bot.reply_to(message, f"🎞 Видео принято! Всего файлов в очереди: {total}")
 
  
 
@@ -104,11 +136,13 @@ def handle_audio(message):
 
     chat_id = message.chat.id
 
-    user_data.setdefault(chat_id, {'media': [], 'audio': None})
-
     file_id = message.audio.file_id if message.audio else message.voice.file_id
 
     file_info = bot.get_file(file_id)
+
+    downloaded = bot.download_file(file_info.file_path)
+
+   
 
     os.makedirs(f"temp_{chat_id}", exist_ok=True)
 
@@ -116,11 +150,19 @@ def handle_audio(message):
 
     with open(path, 'wb') as f:
 
-        f.write(bot.download_file(file_info.file_path))
+        f.write(downloaded)
 
-    user_data[chat_id]['audio'] = path
+       
 
-    bot.reply_to(message, "🎵 Музыка загружена! Жми /make для сборки 15-секундного эдита.")
+    with data_lock:
+
+        user_data.setdefault(chat_id, {'media': [], 'audio': None})
+
+        user_data[chat_id]['audio'] = path
+
+        total = len(user_data[chat_id]['media'])
+
+    bot.reply_to(message, f"🎵 Музыка загружена! Загружено фото/видео: {total} шт.\nЖми /make для сборки эдита до 25 сек!")
 
  
 
@@ -130,31 +172,35 @@ def make_edit(message):
 
     chat_id = message.chat.id
 
-    data = user_data.get(chat_id)
+    with data_lock:
 
-    if not data or len(data['media']) < 2 or not data['audio']:
+        data = user_data.get(chat_id)
 
-        bot.reply_to(message, "❌ Скинь минимум 2 файла (видео или фото) и 1 трек!")
+        if not data or len(data['media']) < 2 or not data['audio']:
 
-        return
+            bot.reply_to(message, "❌ Скинь минимум 2 файла (видео или фото) и 1 трек!")
+
+            return
+
+        media_list = list(data['media'])
+
+        audio_in = data['audio']
 
  
 
-    msg = bot.reply_to(message, "🧠 Анализирую трек, убираю звук из видео и накладываю эффекты (30-50 сек)...")
+    msg = bot.reply_to(message, f"🧠 Взял в работу {len(media_list)} файлов! Анализирую басы, убираю звук из видео и собираю эдит на ~25 сек (подожди 40-70 сек)...")
 
     folder = f"temp_{chat_id}"
 
     slowed_audio, output_video = f"{folder}/slowed.mp3", f"{folder}/edit.mp4"
 
-    media_list = data['media']
-
    
 
     try:
 
-        prepare_slowed_audio(data['audio'], slowed_audio)
+        prepare_slowed_audio(audio_in, slowed_audio)
 
-        start_time, durations, intensities = analyze_music_beats(slowed_audio, target_duration=15.0)
+        start_time, durations, intensities = analyze_music_beats(slowed_audio, target_duration=25.0)
 
         video_durations = {p: get_media_duration(p) for t, p in media_list if t == 'video'}
 
@@ -214,7 +260,7 @@ def make_edit(message):
 
         with open(output_video, 'rb') as video:
 
-            bot.send_video(chat_id, video, caption="🔥 15-секундный эдит готов!")
+            bot.send_video(chat_id, video, caption=f"🔥 25-секундный эдит из {len(media_list)} файлов готов!")
 
         bot.delete_message(chat_id, msg.message_id)
 
@@ -232,7 +278,9 @@ def make_edit(message):
 
             os.rmdir(folder)
 
-        user_data[chat_id] = {'media': [], 'audio': None}
+        with data_lock:
+
+            user_data[chat_id] = {'media': [], 'audio': None}
 
  
 
